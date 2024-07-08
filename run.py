@@ -15,25 +15,26 @@ random_user_agent = user_agent.random
 
 async def connect_to_wss(socks5_proxy, user_id):
     device_id = str(uuid.uuid3(uuid.NAMESPACE_DNS, socks5_proxy))
-    logger.info(device_id)
+    logger.info(f"Connecting to {socks5_proxy} with device ID {device_id}")
+    
     while True:
         try:
             await asyncio.sleep(random.randint(1, 10) / 10)
             custom_headers = {
                 "User-Agent": random_user_agent,
-                #"Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
                 "Origin": "chrome-extension://ilehaonighjijnmpnagapkhpcdbhclfg"
             }
             ssl_context = ssl.create_default_context()
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE
-            #urilist = ["wss://proxy.wynd.network:4444/","wss://proxy.wynd.network:4650/"]
-            #uri = random.choice(urilist)
+            
             uri = "wss://proxy.wynd.network:4650"
             server_hostname = "proxy.wynd.network"
             proxy = Proxy.from_url(socks5_proxy)
+            
             async with proxy_connect(uri, proxy=proxy, ssl=ssl_context, server_hostname=server_hostname,
                                      extra_headers=custom_headers) as websocket:
+                
                 async def send_ping():
                     while True:
                         send_message = json.dumps(
@@ -41,14 +42,18 @@ async def connect_to_wss(socks5_proxy, user_id):
                         logger.debug(send_message)
                         await websocket.send(send_message)
                         await asyncio.sleep(5)
-
-                await asyncio.sleep(1)
+                
                 asyncio.create_task(send_ping())
-
+                
                 while True:
                     response = await websocket.recv()
+                    
+                    if not response:
+                        raise Exception("Empty response received")
+                    
                     message = json.loads(response)
                     logger.info(message)
+                    
                     if message.get("action") == "AUTH":
                         auth_response = {
                             "id": message["id"],
@@ -65,15 +70,16 @@ async def connect_to_wss(socks5_proxy, user_id):
                         }
                         logger.debug(auth_response)
                         await websocket.send(json.dumps(auth_response))
-
+                    
                     elif message.get("action") == "PONG":
                         pong_response = {"id": message["id"], "origin_action": "PONG"}
                         logger.debug(pong_response)
                         await websocket.send(json.dumps(pong_response))
+        
         except Exception as e:
-            logger.error(e)
+            logger.error(f"Error in connection to {socks5_proxy}: {str(e)}")
             logger.error(socks5_proxy)
-
+            continue
 
 async def main():
     #find user_id on the site in conlose localStorage.getItem('userId') (if you can't get it, write allow pasting)
